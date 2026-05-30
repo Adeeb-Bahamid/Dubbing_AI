@@ -18,4 +18,4 @@ COPY . .
 
 # 5. أمر تشغيل السيرفر عبر Gunicorn مع زيادة الـ Timeout لـ 5 دقائق
 # ⚠️ ملاحظة: استبدل "myproject" باسم مجلد مشروعك الرئيسي الذي يحتوي على ملف wsgi.py
-CMD ["gunicorn", "myproject.wsgi:application", "--bind", "0.0.0.0:10000", "--timeout", "300"]
+CMD ["gunicorn", "dubbing_project.wsgi:application", "--bind", "0.0.0.0:10000", "--timeout", "300"]
