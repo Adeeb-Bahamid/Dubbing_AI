@@ -1,0 +1,11 @@
+django
+moviepy
+gunicorn
+numpy
+requests
+openai
+python-dotenv
+groq
+edge-tts
+pydub
+django-cors-headers
