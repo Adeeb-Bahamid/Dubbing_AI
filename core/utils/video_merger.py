@@ -21,16 +21,27 @@ def get_video_duration(video_path):
 def apply_speed_change(clip, factor):
     if factor == 1.0 or factor <= 0:
         return clip
-    if hasattr(clip, 'with_duration') and hasattr(clip, 'with_fps'):
-        return clip.with_duration(clip.duration / factor).with_fps(clip.fps * factor)
-    return clip
+    try:
+        # 🔥 الحل السحري لإصدار MoviePy 2.0 الحديث: 
+        # يقوم بتغيير سرعة الفريمات حركياً لمنع تجمد الشاشة (الصورة الواقفة)
+        if hasattr(clip, 'multiply_speed'):
+            return clip.multiply_speed(factor)
+        elif hasattr(clip, 'fx'):
+            import moviepy.video.fx.all as vfx
+            return clip.fx(vfx.multiply_speed, factor)
+
+        return clip
+    except Exception as e:
+        print(f"⚠️ فشل تطبيق تغيير السرعة الحركي، سيتم التراجع للملف الوصفي: {e}")
+        if hasattr(clip, 'with_duration') and hasattr(clip, 'with_fps'):
+            return clip.with_duration(clip.duration / factor).with_fps(clip.fps * factor)
+        return clip
 
 def merge_arabic_audio_with_stretching(video_path, translated_segments, audio_files_dir, output_path):
     """
-
-    نسخة الـ Pipeline الاحترافية الثابتة:
-    تدمج بين سرعة الـ Stream Copy للأجزاء الفاصلة، وضمان الجودة 
-    ومنع تقطيع الصوت والصورة عبر توحيد الترميز النهائي بـ FFmpeg.
+    نسخة الـ Pipeline الاحترافية الثابتة والمعدلة:
+    تعالج مشكلة تجمد الصورة (الشاشة الواقفة) وتمنع التمطيط الصامت تماماً
+    عبر استخدام الحساب الحركي للفريمات وتوحيد الترميز بـ FFmpeg.
     """
     if not os.path.exists(video_path):
         print(f"❌ خطأ: ملف الفيديو غير موجود: {video_path}", file=sys.stderr)
@@ -45,6 +56,7 @@ def merge_arabic_audio_with_stretching(video_path, translated_segments, audio_fi
     os.makedirs(temp_dir, exist_ok=True)
     
     clip_files_list = []
+
     last_end = 0.0
 
     for idx, seg in enumerate(translated_segments):
@@ -57,9 +69,8 @@ def merge_arabic_audio_with_stretching(video_path, translated_segments, audio_fi
             continue
             
         original_duration = end_time - start_time
-
         
-        # 1️⃣ 🔥 هنا تم تبديل الشرط ووضع التعديل الذكي لحماية الأجزاء الفاصلة الصامتة ومنع التداخل
+        # 1️⃣ قطع الأجزاء الفاصلة (صوت أصلي) بسرعة البرق عبر Stream Copy مع حماية الفواصل الميكرونية
         if start_time > last_end and (start_time - last_end) > 0.1:
             chunk_path = os.path.join(temp_dir, f"silent_{idx}.mp4")
             cmd = [
@@ -72,6 +83,7 @@ def merge_arabic_audio_with_stretching(video_path, translated_segments, audio_fi
 
         # 2️⃣ معالجة مقطع الدبلجة الحالي (الـ Chunk)
         audio_file_path = os.path.join(audio_files_dir, f"sub_{idx}.mp3")
+
         chunk_path = os.path.join(temp_dir, f"dubbed_{idx}.mp4")
         
         if os.path.exists(audio_file_path) and original_duration > 0:
@@ -80,9 +92,9 @@ def merge_arabic_audio_with_stretching(video_path, translated_segments, audio_fi
             arabic_audio = AudioFileClip(audio_file_path)
             arabic_duration = arabic_audio.duration
 
-            # التمديد عند الحاجة
+            # التمديد عند الحاجة (إبطاء الفيديو ليناسب الصوت العربي الطويل)
             if arabic_duration > original_duration:
-
+                # معامل السرعة الحركي: سيكون أقل من 1.0 للإبطاء (مثلاً 0.7)
                 speed_factor = original_duration / arabic_duration
                 video_clip = apply_speed_change(video_clip, speed_factor)
                 
@@ -91,55 +103,55 @@ def merge_arabic_audio_with_stretching(video_path, translated_segments, audio_fi
             else:
                 video_clip = video_clip.set_audio(arabic_audio)
                 
-            # رندرة الجزء الصغير فقط وتوحيد الـ FPS مع الفيديو الأصلي
+            # رندرة الجزء الصغير وتثبيت الـ FPS لمنع أي خلل زمني في الـ Concat
             video_clip.write_videofile(
                 chunk_path, codec="libx264", audio_codec="aac",
                 preset="ultrafast", fps=video_fps, logger=None
             )
             
-            # 🔥 إغلاق فوري للكليبات الصغيرة لتفريغ الـ RAM أولاً بأول على Render
+            # إغلاق فوري وتفريغ الذاكرة أولاً بأول
+
             video_clip.close()
             arabic_audio.close()
             
             if os.path.exists(chunk_path):
                 clip_files_list.append(chunk_path)
         else:
-            # نسخ سريع لو لم يوجد ملف صوتي عربي
-            cmd = [
-                'ffmpeg', '-y', '-ss', str(start_time), '-to', str(end_time),
-                '-i', video_path, '-c:v', 'copy', '-c:a', 'copy', chunk_path
-            ]
-            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-            if os.path.exists(chunk_path):
-                clip_files_list.append(chunk_path)
+            # نسخ سريع لو لم يوجد ملف صوتي عربي مع حماية الحدود الزمنية
+            if original_duration > 0.05:
+                cmd = [
+                    'ffmpeg', '-y', '-ss', str(start_time), '-to', str(end_time),
+                    '-i', video_path, '-c:v', 'copy', '-c:a', 'copy', chunk_path
+                ]
+                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if os.path.exists(chunk_path):
+                    clip_files_list.append(chunk_path)
 
         last_end = end_time
 
     # 3️⃣ الجزء المتبقي بعد آخر جملة
-    if video.duration > last_end:
+    if video.duration > last_end and (video.duration - last_end) > 0.1:
         chunk_path = os.path.join(temp_dir, f"remaining.mp4")
         cmd = [
             'ffmpeg', '-y', '-ss', str(last_end), '-to', str(video.duration),
             '-i', video_path, '-c:v', 'copy', '-c:a', 'copy', chunk_path
         ]
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
         if os.path.exists(chunk_path):
             clip_files_list.append(chunk_path)
 
-    # إغلاق الفيديو الأساسي وتفريغ الذاكرة بالكامل قبل التجميع النهائي
+    # إغلاق الفيديو الأساسي كلياً لتفادي بقاء الملف مفتوحاً واستهلاك الرام
     video.close()
 
-    # 4️⃣ التجميع النهائي الذكي لمنع الـ Concat Failure
+    # 4️⃣ التجميع النهائي الذكي والموحد بـ FFmpeg لمنع الـ Desync والتمطيط
     if clip_files_list:
         list_file_path = os.path.join(temp_dir, "clips_list.txt")
         with open(list_file_path, "w") as f:
             for file_p in clip_files_list:
                 f.write(f"file '{file_p}'\n")
         
-        print("⚡ جاري تجميع وتوحيد الفيديو النهائي عبر الحلال السحري...")
-        # إعادة ترميز سريعة تضمن اندماج المسارات 100% بدون أي خلل في الصوت أو الصورة
-
+        print("⚡ جاري تجميع وتوحيد الفيديو النهائي حركياً وزمنياً...")
         concat_cmd = [
             'ffmpeg', '-y', '-f', 'concat', '-safe', '0', 
             '-i', list_file_path, 
@@ -148,16 +160,18 @@ def merge_arabic_audio_with_stretching(video_path, translated_segments, audio_fi
         ]
         subprocess.run(concat_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
-        # تنظيف مساحة السيرفر
+        # تنظيف مساحة السيرفر فوراً
         for file_p in clip_files_list:
             try: os.remove(file_p)
             except: pass
         try: os.remove(list_file_path)
         except: pass
+
         
         print(f"🎉 تمت العملية بنجاح كامل وصارم! الفيديو متاح في: {output_path}")
     else:
         print("⚠️ تحذير: لم يتم إنتاج أي مقاطع للدمج.")
+
 
 
 
