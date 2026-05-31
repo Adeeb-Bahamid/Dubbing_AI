@@ -15,39 +15,92 @@ from .utils.video_merger import merge_arabic_audio_with_stretching
 def index_view(request):
     return render(request, 'index.html')
 
-# 🔥 دالة التجميع الذكية مدمجة هنا كـ Helper Function لخدمة خط الإنتاج
+
 def merge_translated_segments_into_chunks(translated_segments, max_gap=1.5, max_duration=8.0, max_words=35):
     """
-    تحويل المنظومة إلى Chunk-based عبر دمج الجمل العربية المترجمة 
-    بناءً على الفجوة الزمنية، الحد الأقصى للمدة، والحد الأقصى للكلمات.
+    النسخة الآمنة والمصححة: تمنع الحشو الصامت وتراكم الأوقات (Time Drifting)
+    في الفيديوهات الطويلة عبر ضبط صارم لحدود البداية والنهاية.
     """
     if not translated_segments:
         return []
 
     merged_chunks = []
-    current_chunk = translated_segments[0].copy()
+    # أخذ نسخة عميقة ونظيفة من أول جملة
+    current_chunk = {
+        'start': float(translated_segments[0]['start']),
+        'end': float(translated_segments[0]['end']),
+        'text': str(translated_segments[0]['text']).strip()
+    }
 
     for next_seg in translated_segments[1:]:
-        # 1. حساب الفجوة الزمنية بين نهاية الـ Chunk الحالي وبداية الجملة التالية
-        gap = float(next_seg['start']) - float(current_chunk['end'])
+        seg_start = float(next_seg['start'])
+        seg_end = float(next_seg['end'])
+        seg_text = str(next_seg['text']).strip()
+
+        # 1. حساب الفجوة الفعلية بين الجملتين
+        gap = seg_start - current_chunk['end']
         
-        # 2. حساب المدة الزمنية الكلية المحتملة في حال الدمج
-        potential_duration = float(next_seg['end']) - float(current_chunk['start'])
+        # 2. حساب المدة الإجمالية في حال الدمج
+        potential_duration = seg_end - current_chunk['start']
         
-        # 3. حساب عدد الكلمات الإجمالي (تم تعديل المفتاح إلى 'text' ليتوافق مع translator.py الخاص بك)
-        potential_text = current_chunk['text'] + " " + next_seg['text']
+
+        # 3. حساب عدد كلمات النص المدمج
+        potential_text = current_chunk['text'] + " " + seg_text
         word_count = len(potential_text.split())
 
-        # اختبار الشروط الثلاثة الذكية لمنع انفجار الـ Chunk
+        # شروط الدمج الصارمة
         if gap <= max_gap and potential_duration <= max_duration and word_count <= max_words:
-            current_chunk['end'] = next_seg['end']
+            # دمج آمن: تحديث التوقيت والنص معاً خطوة بخطوة
+            current_chunk['end'] = seg_end
             current_chunk['text'] = potential_text
         else:
+            # إذا لم تنطبق الشروط، نغلق الـ Chunk الحالي فوراً ونحفظه
             merged_chunks.append(current_chunk)
-            current_chunk = next_seg.copy()
+            # نبدأ Chunk جديد معزول تماماً بتوقيته الخاص لمنع سرقة الأوقات
+            current_chunk = {
+                'start': seg_start,
+                'end': seg_end,
+                'text': seg_text
+            }
 
+    # حفظ آخر قطعة في الحلقة
     merged_chunks.append(current_chunk)
     return merged_chunks
+
+
+# 🔥 دالة التجميع الذكية مدمجة هنا كـ Helper Function لخدمة خط الإنتاج
+# def merge_translated_segments_into_chunks(translated_segments, max_gap=1.5, max_duration=8.0, max_words=35):
+#     """
+#     تحويل المنظومة إلى Chunk-based عبر دمج الجمل العربية المترجمة 
+#     بناءً على الفجوة الزمنية، الحد الأقصى للمدة، والحد الأقصى للكلمات.
+#     """
+#     if not translated_segments:
+#         return []
+
+#     merged_chunks = []
+#     current_chunk = translated_segments[0].copy()
+
+#     for next_seg in translated_segments[1:]:
+#         # 1. حساب الفجوة الزمنية بين نهاية الـ Chunk الحالي وبداية الجملة التالية
+#         gap = float(next_seg['start']) - float(current_chunk['end'])
+        
+#         # 2. حساب المدة الزمنية الكلية المحتملة في حال الدمج
+#         potential_duration = float(next_seg['end']) - float(current_chunk['start'])
+        
+#         # 3. حساب عدد الكلمات الإجمالي (تم تعديل المفتاح إلى 'text' ليتوافق مع translator.py الخاص بك)
+#         potential_text = current_chunk['text'] + " " + next_seg['text']
+#         word_count = len(potential_text.split())
+
+#         # اختبار الشروط الثلاثة الذكية لمنع انفجار الـ Chunk
+#         if gap <= max_gap and potential_duration <= max_duration and word_count <= max_words:
+#             current_chunk['end'] = next_seg['end']
+#             current_chunk['text'] = potential_text
+#         else:
+#             merged_chunks.append(current_chunk)
+#             current_chunk = next_seg.copy()
+
+#     merged_chunks.append(current_chunk)
+#     return merged_chunks
 
 def _background_pipeline(job_id):
     try:
