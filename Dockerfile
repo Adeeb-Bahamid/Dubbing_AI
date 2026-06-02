@@ -16,6 +16,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 4. نسخ باقي كود المشروع داخل الحاوية
 COPY . .
 
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# تعيين السكريبت كنقطة انطلاق إجبارية
+ENTRYPOINT ["/entrypoint.sh"]
+
 # 5. أمر تشغيل السيرفر عبر Gunicorn مع زيادة الـ Timeout لـ 5 دقائق
 # ⚠️ ملاحظة: استبدل "myproject" باسم مجلد مشروعك الرئيسي الذي يحتوي على ملف wsgi.py
 CMD ["gunicorn", "dubbing_project.wsgi:application", "--bind", "0.0.0.0:10000", "--timeout", "300"]
