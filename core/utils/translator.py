@@ -1,104 +1,18 @@
-# utils/translator.py
-import sys
-from groq import Groq
-from django.conf import settings
-
-def translate_segments(segments):
-    """
-    ترجمة كتل النصوص المدمجة زمنياً لتقليل طلبات الـ API والمحافظة على اتساق المعنى.
-    """
-    if not segments:
-
-        return []
-
-    client = Groq(api_key=settings.GROQ_API_KEY)
-    
-    valid_segments = [seg for seg in segments if seg['text'].strip()]
-    if not valid_segments:
-        return segments
-
-    system_instruction = (
-        "You are an expert technical translator specializing in programming and software development, particularly Flutter and Dart.\n"
-        "You will receive multiple sentences separated by '|||'. Translate each sentence into fluent Arabic suitable for a voice-over.\n\n"
-        "STRICT RULES:\n"
-        "1. Output exactly the same number of sentences.\n"
-        "2. Keep the separator '|||' exactly between the translated sentences.\n"
-        "3. NEVER translate names of frameworks literally (e.g., 'Flutter' -> 'فلاتر', 'Riverpod' -> 'ريفر بود').\n"
-        "4. Output ONLY the final Arabic text with the separators, without any notes, introductions, or markdown blocks."
-    )
-
-    chunk_size = 15  
-    translated_segments = []
-
-    for i in range(0, len(valid_segments), chunk_size):
-
-        batch = valid_segments[i:i+chunk_size]
-        combined_text = " ||| ".join([seg['text'] for seg in batch])
-
-        try:
-            response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile", 
-                messages=[
-                    {"role": "system", "content": system_instruction},
-                    {"role": "user", "content": combined_text}
-                ],
-                max_tokens=2000,
-                temperature=0.3
-            )
-            
-            translated_art = response.choices[0].message.content.strip()
-            translated_lines = [line.strip() for line in translated_art.split("|||")]
-
-            # حماية لمنع خروج ترجمة ناقصة الأسطر بسبب تلاعب الذكاء الاصطناعي
-            if len(translated_lines) != len(batch):
-                print(f"⚠️ Warning: Mismatch in translation lines. Fallback enabled.")
-                for idx, seg in enumerate(batch):
-                    translated_segments.append({
-                        'start': seg['start'],
-                        'end': seg['end'],
-                        'text': f"الترجمة التلقائية للمقطع {idx}"
-                    })
-
-            else:
-                for idx, seg in enumerate(batch):
-                    translated_segments.append({
-                        'start': seg['start'],
-                        'end': seg['end'],
-                        'text': translated_lines[idx]
-                    })
-
-        except Exception as e:
-            print(f"❌ Translation API Error: {e}", file=sys.stderr)
-            for seg in batch:
-                translated_segments.append({
-                    'start': seg['start'],
-                    'end': seg['end'],
-                    'text': seg['text']  # العودة للنص الأصلي كحماية من الانهيار
-                })
-
-    return translated_segments
-
-
-
-
-
-
-
+# # utils/translator.py
 # import sys
 # from groq import Groq
 # from django.conf import settings
 
 # def translate_segments(segments):
 #     """
-#     ترجمة النصوص بذكاء عبر تجميع الجمل (Chunks) لتقليل الطلبات،
-#     مع وجود نظام أمان تلقائي يضمن خروج الترجمة كاملة دون نقص.
+#     ترجمة كتل النصوص المدمجة زمنياً لتقليل طلبات الـ API والمحافظة على اتساق المعنى.
 #     """
 #     if not segments:
+
 #         return []
 
 #     client = Groq(api_key=settings.GROQ_API_KEY)
     
-#     # 1️⃣ تصفية الجمل الفارغة محلياً
 #     valid_segments = [seg for seg in segments if seg['text'].strip()]
 #     if not valid_segments:
 #         return segments
@@ -113,65 +27,151 @@ def translate_segments(segments):
 #         "4. Output ONLY the final Arabic text with the separators, without any notes, introductions, or markdown blocks."
 #     )
 
-#     chunk_size = 15  # تقليل حجم المجموعة قليلاً لزيادة دقة النموذج في الالتزام بالفواصل
-#     translated_texts = []
+#     chunk_size = 15  
+#     translated_segments = []
 
 #     for i in range(0, len(valid_segments), chunk_size):
-#         chunk = valid_segments[i:i + chunk_size]
-#         combined_text = " ||| ".join([seg['text'] for seg in chunk])
-        
+
+#         batch = valid_segments[i:i+chunk_size]
+#         combined_text = " ||| ".join([seg['text'] for seg in batch])
+
 #         try:
 #             response = client.chat.completions.create(
-#                 model="llama-3.3-70b-versatile",
+#                 model="llama-3.3-70b-versatile", 
 #                 messages=[
 #                     {"role": "system", "content": system_instruction},
 #                     {"role": "user", "content": combined_text}
 #                 ],
-#                 temperature=0.1, # تقليل العشوائية لأقصى درجة للالتزام بالهيكل
-#                 max_tokens=1500,
-#                 timeout=25
+#                 max_tokens=2000,
+#                 temperature=0.3
 #             )
             
-#             # تقسيم النص العائد بناءً على الفاصل وتنظيفه
-#             chunk_translations = [t.strip() for t in response.choices[0].message.content.strip().split("|||") if t.strip()]
-            
-#             # 2️⃣ التحقق الصارم: إذا نجح التجميع نعتمد الترجمة
-#             if len(chunk_translations) == len(chunk):
-#                 translated_texts.extend(chunk_translations)
-#             else:
-#                 # 3️⃣ نظام الأمان (Fallback): إذا خبص النموذج في الفواصل، نترجم جمل هذه المجموعة فرادى فوراً لكي لا تضيع الترجمة
-#                 print(f"⚠️ تفاوات في الفواصل في المجموعة {i//chunk_size + 1}، يتم الانتقال لنظام الأمان التلقائي...")
-#                 for single_seg in chunk:
-#                     try:
-#                         single_resp = client.chat.completions.create(
-#                             model="llama-3.3-70b-versatile",
-#                             messages=[
-#                                 {"role": "system", "content": "Translate this tech sentence to natural Arabic. Output only the translation. Phonetically transliterate terms like Flutter to فلاتر and Riverpod to ريفر بود."},
-#                                 {"role": "user", "content": single_seg['text']}
-#                             ],
-#                             temperature=0.2,
-#                             max_tokens=150
-#                         )
-#                         translated_texts.append(single_resp.choices[0].message.content.strip())
-#                     except Exception:
-#                         translated_texts.append(single_seg['text']) # إذا سقط تماماً نضع النص الأصلي كملجأ أخير
-                        
-#         except Exception as e:
-#             print(f"\n⚠️ Groq Chunk Error: {e}\n", file=sys.stderr)
-#             # في حال سقوط الشبكة، نمرر النص الأصلي لهذا الجزء
-#             translated_texts.extend([seg['text'] for seg in chunk])
+#             translated_art = response.choices[0].message.content.strip()
+#             translated_lines = [line.strip() for line in translated_art.split("|||")]
 
-#     # إعادة ربط النصوص المترجمة بالتوقيتات الأصلية
-#     final_segments = []
-#     for idx, seg in enumerate(valid_segments):
-#         ar_text = translated_texts[idx] if idx < len(translated_texts) else seg['text']
-#         final_segments.append({
-#             'start': seg['start'],
-#             'end': seg['end'],
-#             'text': ar_text
-#         })
+#             # حماية لمنع خروج ترجمة ناقصة الأسطر بسبب تلاعب الذكاء الاصطناعي
+#             if len(translated_lines) != len(batch):
+#                 print(f"⚠️ Warning: Mismatch in translation lines. Fallback enabled.")
+#                 for idx, seg in enumerate(batch):
+#                     translated_segments.append({
+#                         'start': seg['start'],
+#                         'end': seg['end'],
+#                         'text': f"الترجمة التلقائية للمقطع {idx}"
+#                     })
+
+#             else:
+#                 for idx, seg in enumerate(batch):
+#                     translated_segments.append({
+#                         'start': seg['start'],
+#                         'end': seg['end'],
+#                         'text': translated_lines[idx]
+#                     })
+
+#         except Exception as e:
+#             print(f"❌ Translation API Error: {e}", file=sys.stderr)
+#             for seg in batch:
+#                 translated_segments.append({
+#                     'start': seg['start'],
+#                     'end': seg['end'],
+#                     'text': seg['text']  # العودة للنص الأصلي كحماية من الانهيار
+#                 })
+
+#     return translated_segments
+
+
+
+
+
+
+
+import sys
+from groq import Groq
+from django.conf import settings
+
+def translate_segments(segments):
+    """
+    ترجمة النصوص بذكاء عبر تجميع الجمل (Chunks) لتقليل الطلبات،
+    مع وجود نظام أمان تلقائي يضمن خروج الترجمة كاملة دون نقص.
+    """
+    if not segments:
+        return []
+
+    client = Groq(api_key=settings.GROQ_API_KEY)
+    
+    # 1️⃣ تصفية الجمل الفارغة محلياً
+    valid_segments = [seg for seg in segments if seg['text'].strip()]
+    if not valid_segments:
+        return segments
+
+    system_instruction = (
+        "You are an expert technical translator specializing in programming and software development, particularly Flutter and Dart.\n"
+        "You will receive multiple sentences separated by '|||'. Translate each sentence into fluent Arabic suitable for a voice-over.\n\n"
+        "STRICT RULES:\n"
+        "1. Output exactly the same number of sentences.\n"
+        "2. Keep the separator '|||' exactly between the translated sentences.\n"
+        "3. NEVER translate names of frameworks literally (e.g., 'Flutter' -> 'فلاتر', 'Riverpod' -> 'ريفر بود').\n"
+        "4. Output ONLY the final Arabic text with the separators, without any notes, introductions, or markdown blocks."
+    )
+
+    chunk_size = 15  # تقليل حجم المجموعة قليلاً لزيادة دقة النموذج في الالتزام بالفواصل
+    translated_texts = []
+
+    for i in range(0, len(valid_segments), chunk_size):
+        chunk = valid_segments[i:i + chunk_size]
+        combined_text = " ||| ".join([seg['text'] for seg in chunk])
         
-#     return final_segments
+        try:
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": combined_text}
+                ],
+                temperature=0.1, # تقليل العشوائية لأقصى درجة للالتزام بالهيكل
+                max_tokens=1500,
+                timeout=25
+            )
+            
+            # تقسيم النص العائد بناءً على الفاصل وتنظيفه
+            chunk_translations = [t.strip() for t in response.choices[0].message.content.strip().split("|||") if t.strip()]
+            
+            # 2️⃣ التحقق الصارم: إذا نجح التجميع نعتمد الترجمة
+            if len(chunk_translations) == len(chunk):
+                translated_texts.extend(chunk_translations)
+            else:
+                # 3️⃣ نظام الأمان (Fallback): إذا خبص النموذج في الفواصل، نترجم جمل هذه المجموعة فرادى فوراً لكي لا تضيع الترجمة
+                print(f"⚠️ تفاوات في الفواصل في المجموعة {i//chunk_size + 1}، يتم الانتقال لنظام الأمان التلقائي...")
+                for single_seg in chunk:
+                    try:
+                        single_resp = client.chat.completions.create(
+                            model="llama-3.3-70b-versatile",
+                            messages=[
+                                {"role": "system", "content": "Translate this tech sentence to natural Arabic. Output only the translation. Phonetically transliterate terms like Flutter to فلاتر and Riverpod to ريفر بود."},
+                                {"role": "user", "content": single_seg['text']}
+                            ],
+                            temperature=0.2,
+                            max_tokens=150
+                        )
+                        translated_texts.append(single_resp.choices[0].message.content.strip())
+                    except Exception:
+                        translated_texts.append(single_seg['text']) # إذا سقط تماماً نضع النص الأصلي كملجأ أخير
+                        
+        except Exception as e:
+            print(f"\n⚠️ Groq Chunk Error: {e}\n", file=sys.stderr)
+            # في حال سقوط الشبكة، نمرر النص الأصلي لهذا الجزء
+            translated_texts.extend([seg['text'] for seg in chunk])
+
+    # إعادة ربط النصوص المترجمة بالتوقيتات الأصلية
+    final_segments = []
+    for idx, seg in enumerate(valid_segments):
+        ar_text = translated_texts[idx] if idx < len(translated_texts) else seg['text']
+        final_segments.append({
+            'start': seg['start'],
+            'end': seg['end'],
+            'text': ar_text
+        })
+        
+    return final_segments
 
 
 
