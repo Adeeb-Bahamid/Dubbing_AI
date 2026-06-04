@@ -1,5 +1,202 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <title>نظام الدبلجة التلقائية الذكي</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f7f6;
+            margin: 40px auto;
+            max-width: 700px;
+            text-align: center;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        input[type="file"] {
+            margin: 20px 0;
+            padding: 10px;
+        }
+
+        button {
+            background: #2ecc71;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            background: #27ae60;
+        }
+
+        #status {
+            margin: 20px 0;
+            font-weight: bold;
+            color: #34495e;
+            font-size: 15px;
+        }
+
+        /* شريط التقدم الحي */
+        .progress-container {
+            width: 100%;
+            background-color: #e0e0e0;
+            border-radius: 8px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .progress-bar {
+            width: 0%;
+            height: 20px;
+            background-color: #3498db;
+            border-radius: 8px;
+            text-align: center;
+            line-height: 20px;
+            color: white;
+            font-size: 12px;
+            transition: width 0.4s ease;
+        }
+
+        video {
+            margin-top: 25px;
+            width: 100%;
+            border-radius: 8px;
+            border: 2px solid #bdc3c7;
+            background: #000;
+            display: none;
+        }
+    </style>
+
+</head>
+
+<body>
+    <div class="card">
+        <h2>🎙️ نظام دبلجة الفيديو إلى العربية</h2>
+        <p>قم برفع مقطع فيديو بصيغة MP4 ليقوم الذكاء الاصطناعي بتفريغه وترجمته ودبلجته تلقائياً.</p>
+
+        <form id="uploadForm">
+            <input type="file" id="videoFile" accept="video/mp4" required><br>
+            <button type="submit" id="submitBtn">ابدأ عملية الدبلجة الذكية</button>
+        </form>
+
+        <div id="status">جاهز لرفع المقطع...</div>
+
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar" id="progressBar">0%</div>
+        </div>
+
+        <video id="videoPlayer" controls></video>
+    </div>
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const fileInput = document.getElementById('videoFile');
+        const statusDiv = document.getElementById('status');
+        const submitBtn = document.getElementById('submitBtn');
+        const progressContainer =
+
+            document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const videoPlayer = document.getElementById('videoPlayer');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('video', file);
+
+            statusDiv.innerHTML = "🚀 جاري رفع ملف الفيديو إلى السيرفر، يرجى الانتظار...";
+            submitBtn.disabled = true;
+            videoPlayer.style.display = "none";
+
+            try {
+                // 1️⃣ إرسال الطلب لملف الـ View الصحيح المعتمد بـ POST
+                const response = await fetch('/api/upload-video', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.job_id) {
+
+                    progressContainer.style.display = "block";
+                    trackJobStatus(data.job_id);
+                } else {
+                    statusDiv.innerHTML = "❌ حدث خطأ أثناء الرفع: " + (data.error || "خطأ غير معروف");
+                    submitBtn.disabled = false;
+                }
+            } catch (err) {
+                statusDiv.innerHTML = "❌ فشل الاتصال بالسيرفر أثناء الرفع.";
+                submitBtn.disabled = false;
+                console.error(err);
+            }
+        });
+
+        function trackJobStatus(jobId) {
+            const interval = setInterval(async () => {
+                try {
+                    // 2️⃣ تصحيح الرابط ليتطابق مع الـ urls.py الجديد تماماً
+                    const response = await fetch(`/api/job-status/${jobId}`);
+                    const data = await response.json();
+
+                    // تحديث النسبة المئوية وشريط التقدم في الواجهة
+                    if (data.percentage !== undefined) {
+                        const pct = Math.round(data.percentage);
+                        progressBar.style.width = pct + "%";
+                        progressBar.innerHTML = pct + "%";
+                    }
+
+                    // تحديث نص الخطوة الحالية القادم من السيرفر مباشرة
+                    if (data.status_text) {
+                        statusDiv.innerHTML = `⚙️ الحالة الحالية: ${data.status_text}`;
+                    }
+
+                    if (data.status === 'SUCCESS') {
+                        clearInterval(interval);
+                        statusDiv.innerHTML = "🎉 ✅ اكتملت الدبلجة بنجاح! جاري تشغيل المقطع الممدد دقيقاً...";
+
+                        // 3️⃣ تصحيح رابط التحميل النهائي
+                        videoPlayer.src = `/api/download/${jobId}`;
+                        videoPlayer.style.display = "block";
+                        submitBtn.disabled = false;
+                        videoPlayer.play();
+                    }
+                    else if (data.status === 'FAILED') {
+                        clearInterval(interval);
+                        statusDiv.innerHTML = "❌ فشلت المعالجة هندسياً. السبب: " + (data.error_message || "خطأ داخلي في الـ Pipeline");
+                        progressBar.style.backgroundColor = "#e74c3c";
+                        submitBtn.disabled = false;
+                    }
+                } catch (err) {
+                    console.error("Polling Error:", err);
+                }
+            }, 3000); // الفحص الدوري كل 3 ثوانٍ آمن تماماً ولا يسبب حمل
+        }
+    </script>
+
+</body>
+
+</html>
+
+
+
+<!-- <!DOCTYPE html>
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <title>نظام الدبلجة التلقائية الذكي</title>
@@ -65,4 +262,4 @@
         }
     </script>
 </body>
-</html>
+</html> -->
