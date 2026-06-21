@@ -5,7 +5,7 @@ import sys
 import edge_tts
 
 
-async def _tts_worker(text, output_path): 
+async def _tts_worker(text, output_path,semaphore): 
     async with semaphore:
         communicate = edge_tts.Communicate(
             text,
