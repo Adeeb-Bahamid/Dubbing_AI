@@ -178,7 +178,7 @@ def upload_video_api(request):
     )
     
     # threading.Thread(target=_background_pipeline, args=(str(job.id),)).start()
-    worker = threading.Thread(target=_background_pipeline, args=(str(job.id)), daemon=True)
+    worker = threading.Thread(target=_background_pipeline, args=(str(job.id),), daemon=True)
     worker.start()
     
     return JsonResponse({'job_id': str(job.id), 'status': 'PENDING'}, status=202)
