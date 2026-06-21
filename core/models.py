@@ -11,9 +11,9 @@ class DubbingJob(models.Model):
     output_video = models.FileField(upload_to='outputs/', null=True, blank=True)
     
     # محددات الصوت والدبلجة
-    # voice_type = models.CharField(max_length=50)
-    # technical_mode = models.BooleanField(default=True)
-    # speaking_pace = models.FloatField(default=1.0)
+    voice_type = models.CharField(max_length=50)
+    technical_mode = models.BooleanField(default=True)
+    speaking_pace = models.FloatField(default=1.0)
     
     # تتبع خط الإنتاج (Pipeline Tracking)
     percentage = models.FloatField(default=0.0)
