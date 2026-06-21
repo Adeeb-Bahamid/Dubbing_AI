@@ -1,3 +1,4 @@
+# transcriber.py
 import os
 from groq import Groq
 from django.conf import settings
@@ -29,6 +30,8 @@ def transcribe_audio(audio_path):
             })
             
     return segments
+
+
 # import whisper
 # import torch
 # def transcribe_audio(audio_path):

@@ -4,34 +4,108 @@ import os
 import sys
 import edge_tts
 
-async def _tts_worker(text, output_path):
-    """
-    استدعاء محرك edge_tts لتوليد صوت طبيعي ومريح بدون تعليق
-    """
-    communicate = edge_tts.Communicate(text, "ar-SA-HamedNeural")
-    await communicate.save(output_path)
 
-def generate_arabic_audio_track(translated_segments, temp_dir):
+async def _tts_worker(text, output_path): 
+    async with semaphore:
+        communicate = edge_tts.Communicate(
+            text,
+            "ar-SA-HamedNeural"
+        )
+        await communicate.save(output_path)
+
+
+async def _generate_all_tasks(tasks):
+    await asyncio.gather(*tasks)
+
+
+def generate_arabic_audio_track(
+    translated_segments,
+    temp_dir
+):
     """
-    توليد ملفات صوتية منفصلة لكل كتلة مترجمة متناسقة مع منطق الـ Merger والمؤشرات الحقيقية.
+    توليد جميع المقاطع الصوتية بالتوازي
+    بدلاً من تشغيل Event Loop لكل مقطع.
     """
-    print("🎙️ جاري توليد التعليق الصوتي العربي لكل جزء...")
-    
+
+    print("🎙️ Starting Parallel TTS Generation...")
+
+    tasks = []
+
     for idx, seg in enumerate(translated_segments):
-        if not seg['text'].strip(): 
+
+        text = seg.get("text", "").strip()
+
+        if not text:
             continue
+
+        output_path = os.path.join(
+            temp_dir,
+            f"sub_{idx}.mp3"
+        )
+
+        semaphore = asyncio.Semaphore(10)
+        tasks.append(
+            _tts_worker(
+                text,
+                output_path,
+                semaphore
+            )
+        )
+
+    try:
+
+        asyncio.run(
+            _generate_all_tasks(tasks)
+        )
+
+        print("✅ All TTS files generated successfully.")
+
+    except Exception as e:
+
+
+        print(
+            f"❌ Parallel TTS Error: {e}",
+            file=sys.stderr
+        )
+
+
+
+
+
+
+# import asyncio
+# import os
+# import sys
+# import edge_tts
+
+# async def _tts_worker(text, output_path):
+#     """
+#     استدعاء محرك edge_tts لتوليد صوت طبيعي ومريح بدون تعليق
+#     """
+#     communicate = edge_tts.Communicate(text, "ar-SA-HamedNeural")
+#     await communicate.save(output_path)
+
+# def generate_arabic_audio_track(translated_segments, temp_dir):
+#     """
+#     توليد ملفات صوتية منفصلة لكل كتلة مترجمة متناسقة مع منطق الـ Merger والمؤشرات الحقيقية.
+#     """
+#     print("🎙️ جاري توليد التعليق الصوتي العربي لكل جزء...")
+    
+#     for idx, seg in enumerate(translated_segments):
+#         if not seg['text'].strip(): 
+#             continue
         
-        output_file_name = f"sub_{idx}.mp3"
-        output_path = os.path.join(temp_dir, output_file_name)
+#         output_file_name = f"sub_{idx}.mp3"
+#         output_path = os.path.join(temp_dir, output_file_name)
 
         
-        try:
-            # تشغيل المعالج بشكل متزامن وآمن داخل الـ Pipeline الخفي
-            asyncio.run(_tts_worker(seg['text'], output_path))
-            print(f"✅ Generated: {output_file_name}")
+#         try:
+#             # تشغيل المعالج بشكل متزامن وآمن داخل الـ Pipeline الخفي
+#             asyncio.run(_tts_worker(seg['text'], output_path))
+#             print(f"✅ Generated: {output_file_name}")
             
-        except Exception as e:
-            print(f"❌ TTS Generation Failed for segment {idx}: {e}", file=sys.stderr)
+#         except Exception as e:
+#             print(f"❌ TTS Generation Failed for segment {idx}: {e}", file=sys.stderr)
 
 
 

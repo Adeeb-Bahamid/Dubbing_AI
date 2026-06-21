@@ -1,5 +1,5 @@
 
-# views.py - النسخة الإنتاجية المستقرة والمربوطة بالكامل
+# core/views.py
 import os
 import shutil
 import threading
@@ -80,7 +80,7 @@ def _background_pipeline(job_id):
         job.status_text = "Extracting audio tracks from video..."
         job.save()
         
-        orig_audio = os.path.join(temp_dir, 'original.wav')
+        orig_audio = os.path.join(temp_dir, 'original.mp3')
         extract_audio(video_path, orig_audio)
         
         # 2️⃣ المرحلة 1: تحويل الصوت إلى نصوص عبر Groq API (Whisper)
@@ -177,7 +177,9 @@ def upload_video_api(request):
         status_text="Waiting in queue..."
     )
     
-    threading.Thread(target=_background_pipeline, args=(str(job.id),)).start()
+    # threading.Thread(target=_background_pipeline, args=(str(job.id),)).start()
+    worker = threading.Thread(target=_background_pipeline, args=(str(job.id)), daemon=True)
+    worker.start()
     
     return JsonResponse({'job_id': str(job.id), 'status': 'PENDING'}, status=202)
 
