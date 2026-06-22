@@ -68,10 +68,14 @@ def merge_arabic_audio_with_stretching(video_path, translated_segments, audio_fi
         
         # 1️⃣ معالجة الفواصل (حقن صوت صامت وهمي بالكامل لتطابق الـ Codecs والمسارات)
         if start_time > last_end and (start_time - last_end) > 0.05:
+            # chunk_path = os.path.join(temp_dir, f"silent_{idx}.mp4")
+        # gap = start_time - last_end
+        # if gap > 0.3: 
             chunk_path = os.path.join(temp_dir, f"silent_{idx}.mp4")
-            
             # هندسة الفلتر: نأخذ الفيديو ونقطعه، ونولد صوت صامت ستيريو بتردد 44100 هرتز
             filter_str = f"[0:v]trim=start={last_end}:end={start_time},setpts=PTS-STARTPTS,fps=24[v]"
+            # silent_duration = min(gap, 0.4)
+            # filter_str = f"[0:v]trim=start={last_end}:end={last_end + silent_duration},setpts=PTS-STARTPTS,fps=24[v]"
             cmd = [
                 'ffmpeg', '-y', 
                 '-i', video_path, 

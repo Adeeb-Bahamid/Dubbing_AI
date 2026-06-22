@@ -18,7 +18,7 @@ def index_view(request):
     return render(request, 'index.html')
 
 
-def merge_segments_into_chunks(segments, max_gap=1.5, max_duration=8.0, max_words=35):
+def merge_segments_into_chunks(segments, max_gap=0.8, max_duration=8.0, max_words=35):
     """
     تجميع المقاطع النصية بناءً على الطوابع الزمنية قبل الترجمة والتوليد
     لضمان اتساق مؤشرات الصوت (Indices) ومنع تداخل الكلمات.
@@ -95,7 +95,8 @@ def _background_pipeline(job_id):
         # تجميع الجمل زمنياً أولاً لتوحيد السياق والمؤشرات
         optimized_chunks = merge_segments_into_chunks(
             raw_segments,
-            max_gap=1.5,
+            # max_gap=1.5,
+            max_gap=0.8,
             max_duration=8.0,
             max_words=35
         )
