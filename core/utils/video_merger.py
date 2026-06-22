@@ -143,14 +143,34 @@ def merge_arabic_audio_with_stretching(video_path, translated_segments, audio_fi
         
         print("🚀 جاري دمج الأجزاء فائق السرعة عبر Stream Copy المتطابق...")
         # بفضل توحيد الـ Codecs والـ Tracks والصوت الوهمي، الـ copy هنا حاسم وآمن تماماً
+        
         concat_cmd = [
-            'ffmpeg', '-y', '-f', 'concat', '-safe', '0', 
-            '-i', list_file_path, 
+            'ffmpeg', '-y',
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', list_file_path,
 
-            '-c', 'copy', 
-            '-movflags', '+faststart', # بث فوري سلس لتطبيق فلاتر
+            # 🔥 إعادة تغليف آمنة بدون تغيير المحتوى كثير
+            '-c:v', 'libx264',
+            '-preset', 'veryfast',
+            '-crf', '23',
+
+            '-c:a', 'aac',
+            '-b:a', '128k',
+
+            '-movflags', '+faststart',
+
             output_path
         ]
+
+        # concat_cmd = [
+        #     'ffmpeg', '-y', '-f', 'concat', '-safe', '0', 
+        #     '-i', list_file_path, 
+
+        #     '-c', 'copy', 
+        #     '-movflags', '+faststart', # بث فوري سلس لتطبيق فلاتر
+        #     output_path
+        # ]
         subprocess.run(concat_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
         # تنظيف فوري لمساحة السيرفر
