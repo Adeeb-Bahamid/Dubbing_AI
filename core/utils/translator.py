@@ -28,7 +28,8 @@ def translate_segments(segments):
         "4. Output ONLY the final Arabic text with the separators, without any notes, introductions, or markdown blocks."
     )
 
-    chunk_size = 15  # تقليل حجم المجموعة قليلاً لزيادة دقة النموذج في الالتزام بالفواصل
+    # chunk_size = 15  # تقليل حجم المجموعة قليلاً لزيادة دقة النموذج في الالتزام بالفواصل
+    chunk_size = 50
     translated_texts = []
 
     for i in range(0, len(valid_segments), chunk_size):
