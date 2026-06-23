@@ -76,7 +76,7 @@ def _background_pipeline(job_id):
         
         # 1️⃣ المرحلة 0: استخراج الصوت الأصلي
         job.percentage = 15.0
-        job.current_step = 0
+        job.current_step = 1
         job.status_text = "Extracting audio tracks from video..."
         job.save()
         
@@ -85,7 +85,7 @@ def _background_pipeline(job_id):
         
         # 2️⃣ المرحلة 1: تحويل الصوت إلى نصوص عبر Groq API (Whisper)
         job.percentage = 35.0
-        job.current_step = 1
+        job.current_step = 2
 
         job.status_text = "Transcribing speech to text (Cloud Whisper AI)..."
         job.save()
@@ -103,7 +103,7 @@ def _background_pipeline(job_id):
         
         # 3️⃣ المرحلة 2: الترجمة الذكية والسياقية للـ Chunks المدمجة
         job.percentage = 55.0
-        job.current_step = 2
+        job.current_step = 3
         job.status_text = "Translating text to Arabic contextual language..."
         job.save()
         
@@ -111,7 +111,7 @@ def _background_pipeline(job_id):
         
         # 4️⃣ المرحلة 3: توليد الأصوات العربية الـ TTS بناءً على الأجزاء المترجمة
         job.percentage = 75.0
-        job.current_step = 3
+        job.current_step = 4
         job.status_text = "Generating natural Arabic voice-over (AI TTS)..."
 
         job.save()
@@ -125,7 +125,7 @@ def _background_pipeline(job_id):
         
         # 5️⃣ المرحلة 4: دمج الأصوات وتمديد أجزاء الفيديو
         job.percentage = 90.0
-        job.current_step = 4
+        job.current_step = 5
         job.status_text = "Merging final Arabic audio with video tracks..."
         job.save()
         
