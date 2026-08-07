@@ -2,6 +2,9 @@
 import uuid
 from django.db import models
 
+from cloudinary_storage.storage import VideoMediaCloudinaryStorage
+
+
 class DubbingJob(models.Model):
     # استخدام UUID كـ id فريد للـ API
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -11,8 +14,21 @@ class DubbingJob(models.Model):
     # output_video = models.FileField(upload_to='outputs/', null=True, blank=True)
     
     # الملفات الدائمة (Cloudinary)
-    video_file = models.FileField(upload_to='dubbing/input/')
-    output_video = models.FileField(upload_to='dubbing/output/', null=True, blank=True)
+    
+
+    video_file = models.FileField(
+        upload_to='dubbing/input/',
+        storage=VideoMediaCloudinaryStorage()
+    )
+
+    output_video = models.FileField(
+        upload_to='dubbing/output/',
+        storage=VideoMediaCloudinaryStorage(),
+        null=True,
+        blank=True
+    )
+    # video_file = models.FileField(upload_to='dubbing/input/')
+    # output_video = models.FileField(upload_to='dubbing/output/', null=True, blank=True)
 
 
 
