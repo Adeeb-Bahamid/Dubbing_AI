@@ -6,10 +6,16 @@ class DubbingJob(models.Model):
     # استخدام UUID كـ id فريد للـ API
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
-    # ملفات المدخلات والمخرجات
-    video_file = models.FileField(upload_to='uploaded_videos/')
-    output_video = models.FileField(upload_to='outputs/', null=True, blank=True)
+    # # ملفات المدخلات والمخرجات
+    # video_file = models.FileField(upload_to='uploaded_videos/')
+    # output_video = models.FileField(upload_to='outputs/', null=True, blank=True)
     
+    # الملفات الدائمة (Cloudinary)
+    video_file = models.FileField(upload_to='dubbing/input/')
+    output_video = models.FileField(upload_to='dubbing/output/', null=True, blank=True)
+
+
+
     # محددات الصوت والدبلجة
     voice_type = models.CharField(max_length=50)
     technical_mode = models.BooleanField(default=True)
