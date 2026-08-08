@@ -1,8 +1,8 @@
+# SECRET_KEY = 'django-insecure-test-key-no-redis'
 import os
 from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
-# SECRET_KEY = 'django-insecure-test-key-no-redis'
 DEBUG = True
 ALLOWED_HOSTS = ['*']
 
@@ -14,11 +14,11 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    
+    'cloudinary_storage',
+    'cloudinary',
 
     'corsheaders',
-
-    'cloudinary',
-    'cloudinary_storage',
 
     'core',
 ]
@@ -70,14 +70,14 @@ CLOUDINARY_STORAGE = {
 }
 
 
-STORAGES = {
-    'default': {
-        'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage',
-    },
-    'staticfiles': {
-        'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
-    },
-}
+# STORAGES = {
+#     'default': {
+#         'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage',
+#     },
+#     'staticfiles': {
+#         'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+#     },
+# }
 
 
 
