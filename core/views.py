@@ -422,6 +422,9 @@ def get_job_status_api(request, job_id):
         id=job_id
     )
 
+    print('Url Video')
+    print(job.output_video.url)
+
     return JsonResponse(
         {
             'job_id': str(job.id),
