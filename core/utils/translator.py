@@ -17,65 +17,212 @@ def translate_segments(segments):
     valid_segments = [seg for seg in segments if seg['text'].strip()]
     if not valid_segments:
         return segments
+    
+    system_instruction = """
+    You are an expert technical translator specializing in software development, programming, Flutter, and Dart.
 
-    system_instruction = (
-        "You are an expert technical translator specializing in programming and software development, particularly Flutter and Dart.\n"
-        "You will receive multiple sentences separated by '|||'. Translate each sentence into fluent Arabic suitable for a voice-over.\n\n"
-        "STRICT RULES:\n"
-        "1. Output exactly the same number of sentences.\n"
-        "2. Keep the separator '|||' exactly between the translated sentences.\n"
-        "3. NEVER translate names of frameworks literally (e.g., 'Flutter' -> 'فلاتر', 'Riverpod' -> 'ريفر بود').\n"
-        "4. Output ONLY the final Arabic text with the separators, without any notes, introductions, or markdown blocks."
-    )
+    You will receive multiple English text segments separated by the exact separator "|||".
 
-    # chunk_size = 15  # تقليل حجم المجموعة قليلاً لزيادة دقة النموذج في الالتزام بالفواصل
-    chunk_size = 50
+    Translate each segment independently into natural, fluent Arabic suitable for educational video voice-over and subtitles.
+
+    STRICT RULES:
+
+    1. Output exactly the same number of segments as the input.
+    2. Preserve the exact separator "|||" between every translated segment.
+    3. Do not add, remove, merge, split, reorder, or skip any segment.
+    4. Output ONLY the translated Arabic text with the separators.
+    5. Do not include explanations, notes, introductions, markdown, or quotes.
+    6. Preserve the original meaning and technical context accurately.
+    7. Use clear, natural Modern Standard Arabic suitable for educational programming videos.
+    8. Do not translate code, code syntax, file names, variable names, function names, class names, API names, commands, URLs, or package names.
+
+    9. Keep framework and product names in English when appropriate, including Flutter, Dart, Riverpod, Firebase, GitHub, and similar names.
+    10. Do not invent information or add explanations.
+    11. Preserve numbers, version numbers, paths, commands, and technical identifiers accurately.
+    12. If a technical term has a commonly understood Arabic equivalent, use it naturally. Otherwise, keep the English term.
+    13. Make the translation natural and suitable for spoken educational videos.
+
+    CRITICAL:
+    The number of occurrences of "|||" in your output must exactly match the number in the input.
+    """
+
+    chunk_size = 30
     translated_texts = []
 
     for i in range(0, len(valid_segments), chunk_size):
+
         chunk = valid_segments[i:i + chunk_size]
-        combined_text = " ||| ".join([seg['text'] for seg in chunk])
-        
+
+        combined_text = " ||| ".join(
+            seg["text"] for seg in chunk
+        )
+
         try:
+
             response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+
+
+                model="openai/gpt-oss-20b",
+
                 messages=[
-                    {"role": "system", "content": system_instruction},
-                    {"role": "user", "content": combined_text}
+                    {
+                        "role": "system",
+                        "content": system_instruction
+                    },
+                    {
+                        "role": "user",
+                        "content": combined_text
+                    }
                 ],
-                temperature=0.1, # تقليل العشوائية لأقصى درجة للالتزام بالهيكل
-                max_tokens=1500,
-                timeout=25
+
+                temperature=0.1,
+
+                max_tokens=2500,
+
+                timeout=30
             )
-            
-            # تقسيم النص العائد بناءً على الفاصل وتنظيفه
-            chunk_translations = [t.strip() for t in response.choices[0].message.content.strip().split("|||") if t.strip()]
-            
-            # 2️⃣ التحقق الصارم: إذا نجح التجميع نعتمد الترجمة
+
+            result = response.choices[0].message.content.strip()
+
+            chunk_translations = [
+                t.strip()
+                for t in result.split("|||")
+            ]
+
+            # التحقق الصارم من عدد المقاطع
             if len(chunk_translations) == len(chunk):
-                translated_texts.extend(chunk_translations)
+
+
+                translated_texts.extend(
+                    chunk_translations
+                )
+
             else:
-                # 3️⃣ نظام الأمان (Fallback): إذا خبص النموذج في الفواصل، نترجم جمل هذه المجموعة فرادى فوراً لكي لا تضيع الترجمة
-                print(f"⚠️ تفاوات في الفواصل في المجموعة {i//chunk_size + 1}، يتم الانتقال لنظام الأمان التلقائي...")
+
+                print(
+                    f"⚠️ تفاوت في عدد المقاطع في المجموعة "
+                    f"{i // chunk_size + 1}. "
+                    f"يتم استخدام الترجمة الفردية..."
+                )
+
+                # Fallback
                 for single_seg in chunk:
+
                     try:
+
                         single_resp = client.chat.completions.create(
-                            model="llama-3.3-70b-versatile",
+
+                            model="openai/gpt-oss-20b",
+
                             messages=[
-                                {"role": "system", "content": "Translate this tech sentence to natural Arabic. Output only the translation. Phonetically transliterate terms like Flutter to فلاتر and Riverpod to ريفر بود."},
-                                {"role": "user", "content": single_seg['text']}
+                                {
+                                    "role": "system",
+                                    "content": (
+                                        "You are a professional technical translator. "
+                                        "Translate the English text into natural Arabic "
+
+                                        "suitable for an educational programming video. "
+                                        "Preserve technical names such as Flutter, Dart, "
+                                        "Riverpod, Firebase, code, commands, API names, "
+                                        "and programming identifiers. "
+                                        "Output ONLY the Arabic translation."
+                                    )
+                                },
+                                {
+                                    "role": "user",
+                                    "content": single_seg["text"]
+                                }
                             ],
-                            temperature=0.2,
-                            max_tokens=150
+
+                            temperature=0.1,
+
+                            max_tokens=300,
+
+                            timeout=30
                         )
-                        translated_texts.append(single_resp.choices[0].message.content.strip())
+
+                        translated_texts.append(
+                            single_resp.choices[0]
+                            .message.content
+                            .strip()
+                        )
+
                     except Exception:
-                        translated_texts.append(single_seg['text']) # إذا سقط تماماً نضع النص الأصلي كملجأ أخير
-                        
+
+
+                        translated_texts.append(
+                            single_seg["text"]
+                        )
+
         except Exception as e:
-            print(f"\n⚠️ Groq Chunk Error: {e}\n", file=sys.stderr)
-            # في حال سقوط الشبكة، نمرر النص الأصلي لهذا الجزء
-            translated_texts.extend([seg['text'] for seg in chunk])
+
+            print(
+                f"\n⚠️ Groq Chunk Error: {e}\n",
+                file=sys.stderr
+            )
+
+            translated_texts.extend(
+                [seg["text"] for seg in chunk]
+            )
+
+    # system_instruction = (
+    #     "You are an expert technical translator specializing in programming and software development, particularly Flutter and Dart.\n"
+    #     "You will receive multiple sentences separated by '|||'. Translate each sentence into fluent Arabic suitable for a voice-over.\n\n"
+    #     "STRICT RULES:\n"
+    #     "1. Output exactly the same number of sentences.\n"
+    #     "2. Keep the separator '|||' exactly between the translated sentences.\n"
+    #     "3. NEVER translate names of frameworks literally (e.g., 'Flutter' -> 'فلاتر', 'Riverpod' -> 'ريفر بود').\n"
+    #     "4. Output ONLY the final Arabic text with the separators, without any notes, introductions, or markdown blocks."
+    # )
+
+    # # chunk_size = 15  # تقليل حجم المجموعة قليلاً لزيادة دقة النموذج في الالتزام بالفواصل
+    # chunk_size = 50
+    # translated_texts = []
+
+    # for i in range(0, len(valid_segments), chunk_size):
+    #     chunk = valid_segments[i:i + chunk_size]
+    #     combined_text = " ||| ".join([seg['text'] for seg in chunk])
+        
+    #     try:
+    #         response = client.chat.completions.create(
+    #             model="llama-3.3-70b-versatile",
+    #             messages=[
+    #                 {"role": "system", "content": system_instruction},
+    #                 {"role": "user", "content": combined_text}
+    #             ],
+    #             temperature=0.1, # تقليل العشوائية لأقصى درجة للالتزام بالهيكل
+    #             max_tokens=1500,
+    #             timeout=25
+    #         )
+            
+    #         # تقسيم النص العائد بناءً على الفاصل وتنظيفه
+    #         chunk_translations = [t.strip() for t in response.choices[0].message.content.strip().split("|||") if t.strip()]
+            
+    #         # 2️⃣ التحقق الصارم: إذا نجح التجميع نعتمد الترجمة
+    #         if len(chunk_translations) == len(chunk):
+    #             translated_texts.extend(chunk_translations)
+    #         else:
+    #             # 3️⃣ نظام الأمان (Fallback): إذا خبص النموذج في الفواصل، نترجم جمل هذه المجموعة فرادى فوراً لكي لا تضيع الترجمة
+    #             print(f"⚠️ تفاوات في الفواصل في المجموعة {i//chunk_size + 1}، يتم الانتقال لنظام الأمان التلقائي...")
+    #             for single_seg in chunk:
+    #                 try:
+    #                     single_resp = client.chat.completions.create(
+    #                         model="llama-3.3-70b-versatile",
+    #                         messages=[
+    #                             {"role": "system", "content": "Translate this tech sentence to natural Arabic. Output only the translation. Phonetically transliterate terms like Flutter to فلاتر and Riverpod to ريفر بود."},
+    #                             {"role": "user", "content": single_seg['text']}
+    #                         ],
+    #                         temperature=0.2,
+    #                         max_tokens=150
+    #                     )
+    #                     translated_texts.append(single_resp.choices[0].message.content.strip())
+    #                 except Exception:
+    #                     translated_texts.append(single_seg['text']) # إذا سقط تماماً نضع النص الأصلي كملجأ أخير
+                        
+    #     except Exception as e:
+    #         print(f"\n⚠️ Groq Chunk Error: {e}\n", file=sys.stderr)
+    #         # في حال سقوط الشبكة، نمرر النص الأصلي لهذا الجزء
+    #         translated_texts.extend([seg['text'] for seg in chunk])
 
     # إعادة ربط النصوص المترجمة بالتوقيتات الأصلية
     final_segments = []
