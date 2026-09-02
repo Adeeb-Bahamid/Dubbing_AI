@@ -1,7 +1,9 @@
 # translator.py
 import sys
-from groq import Groq
+
 from django.conf import settings
+from groq import Groq
+
 
 def translate_segments(segments):
     """
@@ -12,12 +14,12 @@ def translate_segments(segments):
         return []
 
     client = Groq(api_key=settings.GROQ_API_KEY)
-    
+
     # 1️⃣ تصفية الجمل الفارغة محلياً
-    valid_segments = [seg for seg in segments if seg['text'].strip()]
+    valid_segments = [seg for seg in segments if seg["text"].strip()]
     if not valid_segments:
         return segments
-    
+
     system_instruction = """
     You are an expert technical translator specializing in software development, programming, Flutter, and Dart.
 
@@ -50,55 +52,31 @@ def translate_segments(segments):
     translated_texts = []
 
     for i in range(0, len(valid_segments), chunk_size):
+        chunk = valid_segments[i : i + chunk_size]
 
-        chunk = valid_segments[i:i + chunk_size]
-
-        combined_text = " ||| ".join(
-            seg["text"] for seg in chunk
-        )
+        combined_text = " ||| ".join(seg["text"] for seg in chunk)
 
         try:
-
             response = client.chat.completions.create(
-
-
                 model="openai/gpt-oss-20b",
-
                 messages=[
-                    {
-                        "role": "system",
-                        "content": system_instruction
-                    },
-                    {
-                        "role": "user",
-                        "content": combined_text
-                    }
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": combined_text},
                 ],
-
                 temperature=0.1,
-
                 max_tokens=2500,
-
-                timeout=30
+                timeout=30,
             )
 
             result = response.choices[0].message.content.strip()
 
-            chunk_translations = [
-                t.strip()
-                for t in result.split("|||")
-            ]
+            chunk_translations = [t.strip() for t in result.split("|||")]
 
             # التحقق الصارم من عدد المقاطع
             if len(chunk_translations) == len(chunk):
-
-
-                translated_texts.extend(
-                    chunk_translations
-                )
+                translated_texts.extend(chunk_translations)
 
             else:
-
                 print(
                     f"⚠️ تفاوت في عدد المقاطع في المجموعة "
                     f"{i // chunk_size + 1}. "
@@ -107,63 +85,40 @@ def translate_segments(segments):
 
                 # Fallback
                 for single_seg in chunk:
-
                     try:
-
                         single_resp = client.chat.completions.create(
-
                             model="openai/gpt-oss-20b",
-
                             messages=[
                                 {
                                     "role": "system",
                                     "content": (
                                         "You are a professional technical translator. "
                                         "Translate the English text into natural Arabic "
-
                                         "suitable for an educational programming video. "
                                         "Preserve technical names such as Flutter, Dart, "
                                         "Riverpod, Firebase, code, commands, API names, "
                                         "and programming identifiers. "
                                         "Output ONLY the Arabic translation."
-                                    )
+                                    ),
                                 },
-                                {
-                                    "role": "user",
-                                    "content": single_seg["text"]
-                                }
+                                {"role": "user", "content": single_seg["text"]},
                             ],
-
                             temperature=0.1,
-
                             max_tokens=300,
-
-                            timeout=30
+                            timeout=30,
                         )
 
                         translated_texts.append(
-                            single_resp.choices[0]
-                            .message.content
-                            .strip()
+                            single_resp.choices[0].message.content.strip()
                         )
 
-                    except Exception:
+                    except Exception:  
+                        translated_texts.append(single_seg["text"])
 
+        except Exception as e:  
+            print(f"\n⚠️ Groq Chunk Error: {e}\n", file=sys.stderr)
 
-                        translated_texts.append(
-                            single_seg["text"]
-                        )
-
-        except Exception as e:
-
-            print(
-                f"\n⚠️ Groq Chunk Error: {e}\n",
-                file=sys.stderr
-            )
-
-            translated_texts.extend(
-                [seg["text"] for seg in chunk]
-            )
+            translated_texts.extend([seg["text"] for seg in chunk])
 
     # system_instruction = (
     #     "You are an expert technical translator specializing in programming and software development, particularly Flutter and Dart.\n"
@@ -182,7 +137,7 @@ def translate_segments(segments):
     # for i in range(0, len(valid_segments), chunk_size):
     #     chunk = valid_segments[i:i + chunk_size]
     #     combined_text = " ||| ".join([seg['text'] for seg in chunk])
-        
+
     #     try:
     #         response = client.chat.completions.create(
     #             model="llama-3.3-70b-versatile",
@@ -194,10 +149,10 @@ def translate_segments(segments):
     #             max_tokens=1500,
     #             timeout=25
     #         )
-            
+
     #         # تقسيم النص العائد بناءً على الفاصل وتنظيفه
     #         chunk_translations = [t.strip() for t in response.choices[0].message.content.strip().split("|||") if t.strip()]
-            
+
     #         # 2️⃣ التحقق الصارم: إذا نجح التجميع نعتمد الترجمة
     #         if len(chunk_translations) == len(chunk):
     #             translated_texts.extend(chunk_translations)
@@ -218,7 +173,7 @@ def translate_segments(segments):
     #                     translated_texts.append(single_resp.choices[0].message.content.strip())
     #                 except Exception:
     #                     translated_texts.append(single_seg['text']) # إذا سقط تماماً نضع النص الأصلي كملجأ أخير
-                        
+
     #     except Exception as e:
     #         print(f"\n⚠️ Groq Chunk Error: {e}\n", file=sys.stderr)
     #         # في حال سقوط الشبكة، نمرر النص الأصلي لهذا الجزء
@@ -227,17 +182,12 @@ def translate_segments(segments):
     # إعادة ربط النصوص المترجمة بالتوقيتات الأصلية
     final_segments = []
     for idx, seg in enumerate(valid_segments):
-        ar_text = translated_texts[idx] if idx < len(translated_texts) else seg['text']
-        final_segments.append({
-            'start': seg['start'],
-            'end': seg['end'],
-            'text': ar_text
-        })
-        
+        ar_text = translated_texts[idx] if idx < len(translated_texts) else seg["text"]
+        final_segments.append(
+            {"start": seg["start"], "end": seg["end"], "text": ar_text}
+        )
+
     return final_segments
-
-
-
 
 
 # import sys
@@ -252,7 +202,7 @@ def translate_segments(segments):
 #     # نستخدم نفس مفتاح Groq الذي جهزناه سابقاً في الإعدادات
 #     client = Groq(api_key=settings.GROQ_API_KEY)
 #     translated_segments = []
-    
+
 #     system_instruction = (
 #         "You are an expert technical translator specializing in programming and software development, particularly Flutter and Dart.\n"
 #         "Translate the English text into natural, professional, and fluent Arabic suitable for a video tutorial voice-over.\n\n"
@@ -266,7 +216,7 @@ def translate_segments(segments):
 #         "2. Avoid robotic or overly formal academic Arabic; make it sound like an expert Arab developer explaining a concept to his friends.\n"
 #         "3. Output ONLY the final Arabic translation, without any notes, introduction, or English text."
 #     )
-    
+
 #     for seg in segments:
 #         if not seg['text'].strip(): continue
 #         try:
@@ -280,25 +230,23 @@ def translate_segments(segments):
 #                 ],
 #                 max_tokens=150,
 #                 temperature=0.3, # درجة حرارة منخفضة لضمان الالتزام الصارم بالتعليمات التقنية
-#                 timeout=15 
+#                 timeout=15
 #             )
 #             translated_segments.append({
-#                 'start': seg['start'], 
-#                 'end': seg['end'], 
+#                 'start': seg['start'],
+#                 'end': seg['end'],
 #                 'text': response.choices[0].message.content.strip()
 #             })
 #         except Exception as e:
 #             print(f"\n⚠️ Groq Translation Error: {e}\n", file=sys.stderr)
 #             # حل بديل ذكي: إذا سقط الـ API لأي سبب، نمرر النص الأصلي مؤقتاً لكي لا يخرب خط الإنتاج
 #             translated_segments.append({
-#                 'start': seg['start'], 
-#                 'end': seg['end'], 
+#                 'start': seg['start'],
+#                 'end': seg['end'],
 #                 'text': "حدث خطأ أثناء معالجة الترجمة"
 #             })
-            
+
 #     return translated_segments
-
-
 
 
 # import sys
@@ -308,7 +256,7 @@ def translate_segments(segments):
 # def translate_segments(segments):
 #     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=settings.OPENROUTER_API_KEY)
 #     translated_segments = []
-    
+
 #     # التعليمات الاحترافية لترجمة المحتوى التقني وفلاتر بشكل طبيعي
 #     system_instruction = (
 #         "You are an expert technical translator specializing in programming and software development, particularly Flutter and Dart.\n"
@@ -323,7 +271,7 @@ def translate_segments(segments):
 #         "2. Avoid robotic or overly formal academic Arabic; make it sound like an expert Arab developer explaining a concept to his friends.\n"
 #         "3. Output ONLY the final Arabic translation, without any notes or English text."
 #     )
-    
+
 #     for seg in segments:
 #         if not seg['text']: continue
 #         try:
@@ -334,21 +282,21 @@ def translate_segments(segments):
 #                     {"role": "user", "content": seg['text']}
 #                 ],
 #                 max_tokens=100,  # حماية الحساب المجاني من خطأ 402
-#                 timeout=15 
+#                 timeout=15
 #             )
 #             translated_segments.append({
-#                 'start': seg['start'], 
-#                 'end': seg['end'], 
+#                 'start': seg['start'],
+#                 'end': seg['end'],
 #                 'text': response.choices[0].message.content.strip()
 #             })
 #         except Exception as e:
 #             print(f"\n⚠️ خطأ أثناء الترجمة عبر OpenRouter: {e}\n", file=sys.stderr)
 #             translated_segments.append({
-#                 'start': seg['start'], 
-#                 'end': seg['end'], 
+#                 'start': seg['start'],
+#                 'end': seg['end'],
 #                 'text': "حدث خطأ في الترجمة"
 #             })
-            
+
 #     return translated_segments
 
 # # import sys
@@ -358,7 +306,7 @@ def translate_segments(segments):
 # # def translate_segments(segments):
 # #     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=settings.OPENROUTER_API_KEY)
 # #     translated_segments = []
-    
+
 # #     for seg in segments:
 # #         if not seg['text']: continue
 # #         try:
@@ -369,22 +317,22 @@ def translate_segments(segments):
 # #                     {"role": "user", "content": seg['text']}
 # #                 ]
 # #                 # يمكنك إضافة timeout هنا لضمان عدم تعليق الطلب طويلًا
-# #                 ,max_tokens=100,timeout=15 
+# #                 ,max_tokens=100,timeout=15
 # #             )
 # #             translated_segments.append({
-# #                 'start': seg['start'], 
-# #                 'end': seg['end'], 
+# #                 'start': seg['start'],
+# #                 'end': seg['end'],
 # #                 'text': response.choices[0].message.content.strip()
 # #             })
 # #         except Exception as e:
 # #             # طباعة الخطأ بوضوح في شاشة السيرفر لتعرف المشكلة (مفتاح خطأ، أم اتصال.. إلخ)
 # #             print(f"\n⚠️ خطأ أثناء الترجمة عبر OpenRouter: {e}\n", file=sys.stderr)
-            
+
 # #             # كحل مؤقت لكي تلاحظ المشكلة، سيتم كتابة نص عربي لتعرف بالسمع أن الطلب فشل
 # #             translated_segments.append({
-# #                 'start': seg['start'], 
-# #                 'end': seg['end'], 
+# #                 'start': seg['start'],
+# #                 'end': seg['end'],
 # #                 'text': "حدث خطأ في الترجمة"
 # #             })
-            
+
 # #     return translated_segments

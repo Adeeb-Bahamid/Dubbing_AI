@@ -1,18 +1,14 @@
 # core/models.py
 
 import uuid
-from django.db import models
+
 from cloudinary_storage.storage import VideoMediaCloudinaryStorage
+from django.db import models
 
 
 class DubbingJob(models.Model):
-
     # استخدام UUID كـ id فريد للـ API
-    id = models.UUIDField(
-        primary_key=True,
-        default=uuid.uuid4,
-        editable=False
-    )
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     # ملفات المدخلات والمخرجات
     # video_file = models.FileField(upload_to='uploaded_videos/')
@@ -24,15 +20,14 @@ class DubbingJob(models.Model):
 
     # الملفات الدائمة (Cloudinary)
     video_file = models.FileField(
-        upload_to='dubbing/input/',
-        storage=VideoMediaCloudinaryStorage()
+        upload_to="dubbing/input/", storage=VideoMediaCloudinaryStorage()
     )
 
     output_video = models.FileField(
-        upload_to='dubbing/output/',
+        upload_to="dubbing/output/",
         storage=VideoMediaCloudinaryStorage(),
         null=True,
-        blank=True
+        blank=True,
     )
 
     # video_file = models.FileField(
@@ -53,38 +48,22 @@ class DubbingJob(models.Model):
     # تتبع خط الإنتاج (Pipeline Tracking)
     percentage = models.FloatField(default=0.0)
 
-    current_step = models.IntegerField(
-        default=0
-    )  # من 0 إلى 5
+    current_step = models.IntegerField(default=0)  # من 0 إلى 5
 
-    status_text = models.CharField(
-        max_length=255,
-        default="Waiting in queue..."
-    )
+    status_text = models.CharField(max_length=255, default="Waiting in queue...")
 
     # 🚦 نظام الحالات الصارم المعتمد (Status System)
     # PENDING -> PROCESSING -> SUCCESS أو FAILED
-    status = models.CharField(
-        max_length=20,
-        default='PENDING'
-    )
+    status = models.CharField(max_length=20, default="PENDING")
 
     # ⚠️ إدارة الأخطاء الحقيقية (Error Handling)
-    error_message = models.TextField(
-        null=True,
-        blank=True
-    )
+    error_message = models.TextField(null=True, blank=True)
 
-    created_at = models.DateTimeField(
-        auto_now_add=True
-    )
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return (
-            f"Job {self.id} - "
-            f"Status: {self.status} - "
-            f"{self.percentage}%"
-        )
+        return f"Job {self.id} - Status: {self.status} - {self.percentage}%"
+
 
 # # core/models.py
 # import uuid
@@ -95,11 +74,11 @@ class DubbingJob(models.Model):
 # class DubbingJob(models.Model):
 #     # استخدام UUID كـ id فريد للـ API
 #     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
+
 #     # ملفات المدخلات والمخرجات
 #     # video_file = models.FileField(upload_to='uploaded_videos/')
 #     # output_video = models.FileField(upload_to='outputs/', null=True, blank=True)
-    
+
 #     # الملفات الدائمة (Cloudinary)
 #     video_file = models.FileField(
 #         upload_to='dubbing/input/',
@@ -116,29 +95,28 @@ class DubbingJob(models.Model):
 #     # output_video = models.FileField(upload_to='dubbing/output/', null=True, blank=True)
 
 
-
 #     # محددات الصوت والدبلجة
 #     # voice_type = models.CharField(max_length=50)
 #     # technical_mode = models.BooleanField(default=True)
 #     # speaking_pace = models.FloatField(default=1.0)
-    
+
 #     # تتبع خط الإنتاج (Pipeline Tracking)
 #     percentage = models.FloatField(default=0.0)
 #     current_step = models.IntegerField(default=0) # من 0 إلى 5
 #     status_text = models.CharField(max_length=255, default="Waiting in queue...")
-    
+
 #     # 🚦 نظام الحالات الصارم المعتمد (Status System)
 #     # PENDING -> PROCESSING -> SUCCESS أو FAILED
 #     status = models.CharField(max_length=20, default='PENDING')
-    
+
 #     # ⚠️ إدارة الأخطاء الحقيقية (Error Handling)
 #     error_message = models.TextField(null=True, blank=True)
-    
+
 #     created_at = models.DateTimeField(auto_now_add=True)
 
 #     def __str__(self):
 #         return f"Job {self.id} - Status: {self.status} - {self.percentage}%"
-    
+
 # import uuid
 # from django.db import models
 
