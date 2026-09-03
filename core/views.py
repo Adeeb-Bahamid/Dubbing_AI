@@ -277,8 +277,8 @@ def get_job_status_api(request, job_id):
 
     job = get_object_or_404(DubbingJob, id=job_id)
 
-    print("Url Video")
-    print(job.output_video.url)
+    # print("Url Video")
+    # print(job.output_video.url)
 
     return JsonResponse(
         {
