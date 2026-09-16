@@ -1,5 +1,4 @@
 # core/views.py
-
 import os
 import shutil
 import threading

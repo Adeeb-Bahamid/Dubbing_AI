@@ -58,6 +58,8 @@ def make_silent_audio(duration, output_path):
     command = [
         "ffmpeg",
         "-y",
+        "-threads",
+        "1",  # تخصيص ثريد واحد لتناسب الموارد المحدودة على Render
         "-f",
         "lavfi",
         "-i",
@@ -85,16 +87,14 @@ def merge_arabic_audio_with_stretching(
     output_path,
 ):
     """
-    دمج الفيديو والصوت العربي بطريقة منخفضة استهلاك الذاكرة.
+        دمج الفيديو والصوت العربي وملاءمته لبيئة الخوادم المجانية (مثل
 
-    - تقسيم الفيديو إلى أجزاء لا تتجاوز دقيقتين.
+    Render Free Tier).
 
-    - الحفاظ على منطق تبطيء الفيديو حسب مدة الصوت العربي.
-    - عدم تغيير setpts أو speed_factor.
-    - إزالة الصوت الإنجليزي بالكامل.
-    - إضافة صمت بين الجمل.
-    - معالجة كل جزء بشكل مستقل.
-    - حذف الملفات المؤقتة بعد الانتهاء من كل جزء.
+        - تحديد الأنسجة (-threads 1) لمنع استهلاك المعالج بالكامل وإيقاف السيرفر.
+        - توحيد معدل العينات الصوتي إلى 44100Hz وقناتين (Stereo) للتخلص من الضوضاء.
+        - تقسيم الفيديو إلى أجزاء صغيرة لمنع استهلاك الذاكرة (RAM).
+        - إضافة صمت بين الجمل وتحديد السرعة بنفس المنطق الأصلي.
     """
 
     if not os.path.exists(video_path):
@@ -266,6 +266,8 @@ def merge_arabic_audio_with_stretching(
                         gap_command = [
                             "ffmpeg",
                             "-y",
+                            "-threads",
+                            "1",  # حصر المعالجة بمسار واحد لتخفيف الجهد على Render
                             "-ss",
                             f"{cursor:.3f}",
                             "-t",
@@ -290,6 +292,10 @@ def merge_arabic_audio_with_stretching(
                             "44100",
                             "-ac",
                             "2",
+                            "-b:a",
+                            "128k",
+                            "-af",
+                            "aresample=44100:async=1",
                             "-shortest",
                             silent_video_path,
                         ]
@@ -308,7 +314,7 @@ def merge_arabic_audio_with_stretching(
                 )
 
                 # ==================================================
-                # منطق التبطيء الأصلي - لا يتم تغييره
+                # منطق التبطيء الأصلي ومعالجة الصوت
                 # ==================================================
 
                 if audio_duration > original_duration:
@@ -340,6 +346,9 @@ def merge_arabic_audio_with_stretching(
                         f"fps=24[v]"
                     )
 
+                # فلتر إعادة ترميز الصوت لتجنب الضوضاء
+                audio_filter = "aresample=44100:async=1,aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a]"
+
                 # ==================================================
                 # إنشاء مقطع الجملة العربية
                 # ==================================================
@@ -347,6 +356,8 @@ def merge_arabic_audio_with_stretching(
                 dubbed_command = [
                     "ffmpeg",
                     "-y",
+                    "-threads",
+                    "1",  # حصر الاستهلاك في 1 CPU Core
                     "-ss",
                     f"{start:.3f}",
                     "-t",
@@ -356,11 +367,11 @@ def merge_arabic_audio_with_stretching(
                     "-i",
                     segment["audio"],
                     "-filter_complex",
-                    video_filter,
+                    f"{video_filter}; [1:a]{audio_filter}",
                     "-map",
                     "[v]",
                     "-map",
-                    "1:a:0",
+                    "[a]",
                     "-c:v",
                     "libx264",
                     "-preset",
@@ -373,6 +384,8 @@ def merge_arabic_audio_with_stretching(
                     "44100",
                     "-ac",
                     "2",
+                    "-b:a",
+                    "128k",
                     "-shortest",
                     dubbed_video_path,
                 ]
@@ -422,6 +435,8 @@ def merge_arabic_audio_with_stretching(
             chunk_concat_command = [
                 "ffmpeg",
                 "-y",
+                "-threads",
+                "1",
                 "-f",
                 "concat",
                 "-safe",
@@ -452,7 +467,7 @@ def merge_arabic_audio_with_stretching(
             if run_ffmpeg(chunk_concat_command):
                 output_chunks.append(chunk_output_path)
 
-            # حذف ملفات هذا الجزء فورًا
+            # حذف ملفات هذا الجزء فورًا لتوفير المساحة
             shutil.rmtree(
                 chunk_dir,
                 ignore_errors=True,
@@ -485,10 +500,12 @@ def merge_arabic_audio_with_stretching(
 
         print("🚀 تجميع الأجزاء النهائية...")
 
-        # محاولة التجميع بدون إعادة ترميز
+        # محاولة التجميع بدون إعادة ترميز (توفيراً للـ CPU)
         final_concat_command = [
             "ffmpeg",
             "-y",
+            "-threads",
+            "1",
             "-f",
             "concat",
             "-safe",
@@ -511,6 +528,8 @@ def merge_arabic_audio_with_stretching(
             fallback_command = [
                 "ffmpeg",
                 "-y",
+                "-threads",
+                "1",
                 "-f",
                 "concat",
                 "-safe",
@@ -563,6 +582,573 @@ def merge_arabic_audio_with_stretching(
                 os.remove(final_list_path)
         except OSError:
             pass
+
+
+# # video_merger.py
+
+# import os
+# import shutil
+# import subprocess
+# import sys
+
+
+# def get_video_duration(video_path):
+#     try:
+#         command = [
+#             "ffprobe",
+#             "-v",
+#             "error",
+#             "-show_entries",
+#             "format=duration",
+#             "-of",
+#             "default=noprint_wrappers=1:nokey=1",
+#             video_path,
+#         ]
+
+#         result = subprocess.run(
+#             command,
+#             stdout=subprocess.PIPE,
+#             stderr=subprocess.PIPE,
+#             text=True,
+#             check=True,
+#         )
+
+#         return float(result.stdout.strip())
+
+#     except Exception as error:
+#         print(f"⚠️ فشل جلب مدة الملف: {error}", file=sys.stderr)
+#         return 0.0
+
+
+# def run_ffmpeg(command):
+#     print("▶️ تشغيل FFmpeg...")
+
+#     result = subprocess.run(
+#         command,
+#         stdout=subprocess.PIPE,
+#         stderr=subprocess.PIPE,
+#         text=True,
+#     )
+
+#     if result.returncode != 0:
+#         print("❌ FFmpeg فشل:", file=sys.stderr)
+#         print(result.stderr[-5000:], file=sys.stderr)
+#         return False
+
+#     return True
+
+
+# def make_silent_audio(duration, output_path):
+#     duration = max(float(duration), 0.01)
+
+#     command = [
+#         "ffmpeg",
+#         "-y",
+#         "-f",
+#         "lavfi",
+#         "-i",
+#         "anullsrc=channel_layout=stereo:sample_rate=44100",
+#         "-t",
+#         f"{duration:.3f}",
+#         "-c:a",
+#         "aac",
+#         "-b:a",
+#         "128k",
+#         "-ar",
+#         "44100",
+#         "-ac",
+#         "2",
+#         output_path,
+#     ]
+
+#     return run_ffmpeg(command)
+
+
+# def merge_arabic_audio_with_stretching(
+#     video_path,
+#     translated_segments,
+#     audio_files_dir,
+#     output_path,
+# ):
+#     """
+#     دمج الفيديو والصوت العربي بطريقة منخفضة استهلاك الذاكرة.
+
+#     - تقسيم الفيديو إلى أجزاء لا تتجاوز دقيقتين.
+
+#     - الحفاظ على منطق تبطيء الفيديو حسب مدة الصوت العربي.
+#     - عدم تغيير setpts أو speed_factor.
+#     - إزالة الصوت الإنجليزي بالكامل.
+#     - إضافة صمت بين الجمل.
+#     - معالجة كل جزء بشكل مستقل.
+#     - حذف الملفات المؤقتة بعد الانتهاء من كل جزء.
+#     """
+
+#     if not os.path.exists(video_path):
+#         print(
+#             f"❌ ملف الفيديو غير موجود: {video_path}",
+#             file=sys.stderr,
+#         )
+#         return
+
+#     video_duration = get_video_duration(video_path)
+
+#     if video_duration <= 0:
+#         print(
+#             "❌ تعذر قراءة مدة الفيديو الأصلي.",
+#             file=sys.stderr,
+#         )
+#         return
+
+#     temp_dir = os.path.join(
+#         audio_files_dir,
+#         "temp_clips",
+#     )
+
+#     os.makedirs(temp_dir, exist_ok=True)
+
+#     # تنظيف الملفات المؤقتة القديمة
+#     for filename in os.listdir(temp_dir):
+#         file_path = os.path.join(
+#             temp_dir,
+#             filename,
+#         )
+
+#         if os.path.isfile(file_path):
+#             try:
+#                 os.remove(file_path)
+#             except OSError:
+#                 pass
+
+#         elif os.path.isdir(file_path):
+#             shutil.rmtree(
+#                 file_path,
+#                 ignore_errors=True,
+#             )
+
+#     valid_segments = []
+
+#     for index, segment in enumerate(translated_segments):
+#         audio_path = os.path.join(
+#             audio_files_dir,
+#             f"sub_{index}.mp3",
+#         )
+
+#         if not os.path.exists(audio_path):
+#             print(
+#                 f"⚠️ ملف الصوت غير موجود: {audio_path}",
+#                 file=sys.stderr,
+#             )
+#             continue
+
+#         try:
+#             start = max(
+#                 0.0,
+#                 float(segment["start"]),
+#             )
+
+#             end = min(
+#                 video_duration,
+#                 float(segment["end"]),
+#             )
+
+#         except (KeyError, TypeError, ValueError) as error:
+#             print(
+#                 f"⚠️ بيانات الجملة غير صحيحة: {error}",
+#                 file=sys.stderr,
+#             )
+#             continue
+
+#         if end <= start:
+#             continue
+
+#         valid_segments.append(
+#             {
+#                 "index": index,
+#                 "start": start,
+#                 "end": end,
+#                 "audio": audio_path,
+#             }
+#         )
+
+#     if not valid_segments:
+#         print(
+#             "⚠️ لم يتم العثور على جمل صوتية صالحة.",
+#             file=sys.stderr,
+#         )
+#         return
+
+#     # تقسيم الجمل إلى أجزاء لا تتجاوز دقيقتين
+#     chunks = []
+#     current_chunk = []
+#     current_chunk_start = valid_segments[0]["start"]
+
+#     for segment in valid_segments:
+#         segment_end = segment["end"]
+
+#         if current_chunk and segment_end - current_chunk_start > 120.0:
+#             chunks.append(current_chunk)
+
+#             current_chunk = []
+#             current_chunk_start = segment["start"]
+
+#         current_chunk.append(segment)
+
+#     if current_chunk:
+#         chunks.append(current_chunk)
+
+#     output_chunks = []
+
+#     try:
+#         for chunk_number, segments in enumerate(chunks):
+#             chunk_start = segments[0]["start"]
+#             chunk_end = segments[-1]["end"]
+
+#             chunk_dir = os.path.join(
+#                 temp_dir,
+#                 f"chunk_{chunk_number}",
+#             )
+
+#             os.makedirs(
+#                 chunk_dir,
+#                 exist_ok=True,
+#             )
+
+#             print(
+#                 f"🎬 معالجة الجزء "
+#                 f"{chunk_number + 1}/{len(chunks)} "
+#                 f"من {chunk_start:.2f} "
+#                 f"إلى {chunk_end:.2f} ثانية"
+#             )
+
+#             pieces = []
+#             cursor = chunk_start
+
+#             for piece_number, segment in enumerate(segments):
+#                 start = segment["start"]
+#                 end = segment["end"]
+
+#                 original_duration = end - start
+
+#                 # إضافة الصمت بين الجمل
+#                 if start > cursor + 0.05:
+#                     gap_duration = start - cursor
+
+#                     silent_audio_path = os.path.join(
+#                         chunk_dir,
+#                         f"silent_{piece_number}.m4a",
+#                     )
+
+#                     silent_video_path = os.path.join(
+#                         chunk_dir,
+#                         f"gap_{piece_number}.mp4",
+#                     )
+
+#                     silent_audio_created = make_silent_audio(
+#                         gap_duration,
+#                         silent_audio_path,
+#                     )
+
+#                     if silent_audio_created:
+#                         gap_command = [
+#                             "ffmpeg",
+#                             "-y",
+#                             "-ss",
+#                             f"{cursor:.3f}",
+#                             "-t",
+#                             f"{gap_duration:.3f}",
+#                             "-i",
+#                             video_path,
+#                             "-i",
+#                             silent_audio_path,
+#                             "-map",
+#                             "0:v:0",
+#                             "-map",
+#                             "1:a:0",
+#                             "-c:v",
+#                             "libx264",
+#                             "-preset",
+#                             "ultrafast",
+#                             "-pix_fmt",
+#                             "yuv420p",
+#                             "-c:a",
+#                             "aac",
+#                             "-ar",
+#                             "44100",
+#                             "-ac",
+#                             "2",
+#                             "-shortest",
+#                             silent_video_path,
+#                         ]
+
+#                         if run_ffmpeg(gap_command):
+#                             pieces.append(silent_video_path)
+
+#                 audio_duration = get_video_duration(segment["audio"])
+
+#                 if audio_duration <= 0:
+#                     audio_duration = original_duration
+
+#                 dubbed_video_path = os.path.join(
+#                     chunk_dir,
+#                     f"dubbed_{piece_number}.mp4",
+#                 )
+
+#                 # ==================================================
+#                 # منطق التبطيء الأصلي - لا يتم تغييره
+#                 # ==================================================
+
+#                 if audio_duration > original_duration:
+#                     speed_factor = original_duration / audio_duration
+
+#                     if speed_factor < 0.5:
+#                         speed_factor = 0.5
+
+#                     setpts_factor = 1.0 / speed_factor
+
+#                     video_filter = (
+#                         f"[0:v]"
+#                         f"trim=start=0:end={original_duration:.6f},"
+#                         f"setpts={setpts_factor:.8f}*(PTS-STARTPTS),"
+#                         f"fps=24[v]"
+#                     )
+
+#                     print(
+#                         f"🎬 الجملة {segment['index']}: "
+#                         f"تبطيء الفيديو بمعدل "
+#                         f"{speed_factor:.2f}"
+#                     )
+
+#                 else:
+#                     video_filter = (
+#                         f"[0:v]"
+#                         f"trim=start=0:end={original_duration:.6f},"
+#                         f"setpts=PTS-STARTPTS,"
+#                         f"fps=24[v]"
+#                     )
+
+#                 # ==================================================
+#                 # إنشاء مقطع الجملة العربية
+#                 # ==================================================
+
+#                 dubbed_command = [
+#                     "ffmpeg",
+#                     "-y",
+#                     "-ss",
+#                     f"{start:.3f}",
+#                     "-t",
+#                     f"{original_duration:.3f}",
+#                     "-i",
+#                     video_path,
+#                     "-i",
+#                     segment["audio"],
+#                     "-filter_complex",
+#                     video_filter,
+#                     "-map",
+#                     "[v]",
+#                     "-map",
+#                     "1:a:0",
+#                     "-c:v",
+#                     "libx264",
+#                     "-preset",
+#                     "ultrafast",
+#                     "-pix_fmt",
+#                     "yuv420p",
+#                     "-c:a",
+#                     "aac",
+#                     "-ar",
+#                     "44100",
+#                     "-ac",
+#                     "2",
+#                     "-shortest",
+#                     dubbed_video_path,
+#                 ]
+
+#                 if run_ffmpeg(dubbed_command):
+#                     pieces.append(dubbed_video_path)
+
+#                 cursor = end
+
+#             if not pieces:
+#                 print(
+#                     f"⚠️ لم يتم إنتاج مقاطع للجزء {chunk_number + 1}",
+#                     file=sys.stderr,
+#                 )
+
+#                 shutil.rmtree(
+#                     chunk_dir,
+#                     ignore_errors=True,
+#                 )
+
+#                 continue
+
+#             # إنشاء قائمة مقاطع الجزء
+#             pieces_list_path = os.path.join(
+#                 chunk_dir,
+#                 "pieces.txt",
+#             )
+
+#             with open(
+#                 pieces_list_path,
+#                 "w",
+#                 encoding="utf-8",
+#             ) as file:
+#                 for piece in pieces:
+#                     absolute_piece_path = os.path.abspath(piece)
+
+#                     escaped_piece_path = absolute_piece_path.replace("'", "'\\''")
+
+#                     file.write(f"file '{escaped_piece_path}'\n")
+
+#             chunk_output_path = os.path.join(
+#                 temp_dir,
+#                 f"final_chunk_{chunk_number}.mp4",
+#             )
+
+#             # تجميع مقاطع الجزء
+#             chunk_concat_command = [
+#                 "ffmpeg",
+#                 "-y",
+#                 "-f",
+#                 "concat",
+#                 "-safe",
+#                 "0",
+#                 "-i",
+#                 pieces_list_path,
+#                 "-c:v",
+#                 "libx264",
+#                 "-preset",
+#                 "ultrafast",
+#                 "-crf",
+#                 "23",
+#                 "-pix_fmt",
+#                 "yuv420p",
+#                 "-c:a",
+#                 "aac",
+#                 "-ar",
+#                 "44100",
+#                 "-ac",
+#                 "2",
+#                 "-b:a",
+#                 "128k",
+#                 "-movflags",
+#                 "+faststart",
+#                 chunk_output_path,
+#             ]
+
+#             if run_ffmpeg(chunk_concat_command):
+#                 output_chunks.append(chunk_output_path)
+
+#             # حذف ملفات هذا الجزء فورًا
+#             shutil.rmtree(
+#                 chunk_dir,
+#                 ignore_errors=True,
+#             )
+
+#         if not output_chunks:
+#             print(
+#                 "⚠️ لم يتم إنتاج أي أجزاء نهائية.",
+#                 file=sys.stderr,
+#             )
+#             return
+
+#         # إنشاء قائمة الأجزاء النهائية
+#         final_list_path = os.path.join(
+#             temp_dir,
+#             "final_chunks.txt",
+#         )
+
+#         with open(
+#             final_list_path,
+#             "w",
+#             encoding="utf-8",
+#         ) as file:
+#             for chunk in output_chunks:
+#                 absolute_chunk_path = os.path.abspath(chunk)
+
+#                 escaped_chunk_path = absolute_chunk_path.replace("'", "'\\''")
+
+#                 file.write(f"file '{escaped_chunk_path}'\n")
+
+#         print("🚀 تجميع الأجزاء النهائية...")
+
+#         # محاولة التجميع بدون إعادة ترميز
+#         final_concat_command = [
+#             "ffmpeg",
+#             "-y",
+#             "-f",
+#             "concat",
+#             "-safe",
+#             "0",
+#             "-i",
+#             final_list_path,
+#             "-c",
+#             "copy",
+#             "-movflags",
+#             "+faststart",
+#             output_path,
+#         ]
+
+#         if not run_ffmpeg(final_concat_command):
+#             print(
+#                 "⚠️ فشل التجميع بنسخ المسارات، سيتم استخدام إعادة الترميز.",
+#                 file=sys.stderr,
+#             )
+
+#             fallback_command = [
+#                 "ffmpeg",
+#                 "-y",
+#                 "-f",
+#                 "concat",
+#                 "-safe",
+#                 "0",
+#                 "-i",
+#                 final_list_path,
+#                 "-c:v",
+#                 "libx264",
+#                 "-preset",
+#                 "ultrafast",
+#                 "-crf",
+#                 "23",
+#                 "-pix_fmt",
+#                 "yuv420p",
+#                 "-c:a",
+#                 "aac",
+#                 "-ar",
+#                 "44100",
+#                 "-ac",
+#                 "2",
+#                 "-b:a",
+#                 "128k",
+#                 "-movflags",
+#                 "+faststart",
+#                 output_path,
+#             ]
+
+#             if not run_ffmpeg(fallback_command):
+#                 return
+
+#         print(f"🎉 تم الدمج بنجاح: {output_path}")
+
+#     finally:
+#         # حذف الأجزاء النهائية المؤقتة
+#         for chunk_path in output_chunks:
+#             try:
+#                 if os.path.exists(chunk_path):
+#                     os.remove(chunk_path)
+#             except OSError:
+#                 pass
+
+#         # حذف قائمة الأجزاء
+#         final_list_path = os.path.join(
+#             temp_dir,
+#             "final_chunks.txt",
+#         )
+
+#         try:
+#             if os.path.exists(final_list_path):
+#                 os.remove(final_list_path)
+#         except OSError:
+#             pass
 
 
 # # video_merger.py
